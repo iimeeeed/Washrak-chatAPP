@@ -4,7 +4,7 @@ import hashlib
 import threading
 
 class WebSocketClient:
-    def __init__(self, host='localhost', port=8000):
+    def __init__(self, host='localhost', port=8006):
         self.host = host
         self.port = port
 
@@ -50,15 +50,32 @@ class WebSocketClient:
         
         print("Connected to server. Start chatting!\n")
 
+        threading.Thread(target=self.receive_messages, args=(client_socket,), daemon=True).start()
+
+        self.send_messages(client_socket)
+
+
+
+
+    def receive_messages(self,client_socket):
         try:
             while True:
-                msg = input("You: ")
-                client_socket.send(msg.encode('utf-8'))
-                
                 reply = client_socket.recv(1024)
                 if not reply:
                     break
-                print(f"Server: {reply.decode('utf-8')}")
+                print(f"\nServer: {reply.decode('utf-8')}\nYou: ", end="")
+        except Exception as e:
+            print(f"\nConnection error: {e}")
+        finally:
+            client_socket.close()
+
+    def send_messages(self,client_socket):
+        try:
+            while True:
+                msg = input("You: ")
+                if msg == "":
+                    continue
+                client_socket.send(msg.encode('utf-8'))
         except KeyboardInterrupt:
             print("\nDisconnected from server.")
         finally:

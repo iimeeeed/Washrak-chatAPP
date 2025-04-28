@@ -5,9 +5,10 @@ import threading
 
 
 class WebSocketServer:
-    def __init__(self, host='localhost', port=8000):
+    def __init__(self, host='localhost', port=8006):
         self.host = host
         self.port = port
+        self.clients = []
 
     def generate_key(self, sec_websocket_key):
         magic_string = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
@@ -43,7 +44,7 @@ class WebSocketServer:
     def start(self):
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server.bind((self.host, self.port))
-        server.listen(5)
+        server.listen(2)
         
         print(f"WebSocket server started on ws://{self.host}:{self.port}")
         
@@ -51,18 +52,44 @@ class WebSocketServer:
             client_socket, client_address = server.accept()
             print(f"Connection from {client_address}")
             
-            self.handshake(client_socket)
 
-            try:
-                while True:
-                    message = client_socket.recv(1024)
-                    if not message:
-                        break
-                    print(f"Received: {message.decode('utf-8')}")
-                    
-                    reply = input("Reply: ")
-                    client_socket.send(reply.encode('utf-8'))
-            except ConnectionResetError:
-                print("Client disconnected.")
-            finally:
+
+            if len(self.clients) >= 2:
+                print(f"Rejecting connection from {client_address} (server full).")
+                client_socket.send(
+                "HTTP/1.1 503 Service Unavailable\r\n"
+                "Content-Type: text/plain\r\n"
+                "Connection: close\r\n"
+                "\r\n"
+                "Server is full. Only two clients allowed.\r\n".encode('utf-8')
+                )
                 client_socket.close()
+                continue
+
+            self.handshake(client_socket)
+            self.clients.append(client_socket)
+
+            print(self.clients)
+
+            client_thread = threading.Thread(target=self.handle_client,args=(client_socket,))
+            client_thread.start()
+
+    def handle_client(self,client_socket):
+        try:
+            while True:
+                message = client_socket.recv(1024)
+                if not message:
+                    break
+                print(f"Received: {message.decode('utf-8')}")
+                
+                for client in self.clients:
+                    if client != client_socket:
+                        try:
+                            client.send(message)
+                        except Exception as e:
+                            print(f"Failed to send message to a client: {e}")
+                    
+        except ConnectionResetError:
+            print("Client disconnected.")
+        finally:
+            client_socket.close()
